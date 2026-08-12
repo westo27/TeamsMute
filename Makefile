@@ -7,7 +7,8 @@ build:
 	mkdir -p $(BUNDLE)/Contents/MacOS
 	swiftc -O Sources/main.swift -o $(BUNDLE)/Contents/MacOS/$(APP)
 	cp Info.plist $(BUNDLE)/Contents/
-	codesign --force --sign - $(BUNDLE)
+	codesign --force --sign - --identifier com.westo27.hushkey \
+		-r='designated => identifier "com.westo27.hushkey"' $(BUNDLE)
 
 install: build
 	rm -rf /Applications/$(APP).app
