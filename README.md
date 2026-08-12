@@ -1,5 +1,7 @@
 # Hushkey
 
+<img src="assets/logo.png" width="128" alt="Hushkey logo" align="right">
+
 A minimal macOS menu-bar utility that gives Microsoft Teams a **global mute hotkey** (⌘⇧M) and an optional **push-to-talk mode** — working even when Teams is in the background.
 
 ## Why
