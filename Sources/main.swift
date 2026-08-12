@@ -12,11 +12,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set { UserDefaults.standard.set(newValue, forKey: "pushToTalk") }
     }
 
+    private var playSounds: Bool {
+        get { UserDefaults.standard.bool(forKey: "playSounds") }
+        set { UserDefaults.standard.set(newValue, forKey: "playSounds") }
+    }
+
+    // Best-effort state tracking: Teams' real mute state is unreadable, so
+    // assume "muted" at launch and flip on every toggle we send.
+    private var presumedMuted = true
+    private var soundsMenuItem: NSMenuItem!
+
     private var sigusr1Source: DispatchSourceSignal?
 
     private func debugLog(_ message: String) {
         let line = "\(Date()) \(message)\n"
-        let url = URL(fileURLWithPath: NSHomeDirectory() + "/Library/Logs/TeamsMute.log")
+        let url = URL(fileURLWithPath: NSHomeDirectory() + "/Library/Logs/Hushkey.log")
         if let data = line.data(using: .utf8) {
             if let handle = try? FileHandle(forWritingTo: url) {
                 handle.seekToEndOfFile()
@@ -29,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        UserDefaults.standard.register(defaults: ["playSounds": true])
         // Prompt for Accessibility permission if not yet granted.
         let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         AXIsProcessTrustedWithOptions(opts)
@@ -43,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "mic.circle", accessibilityDescription: "TeamsMute")
+            button.image = NSImage(systemSymbolName: "mic.circle", accessibilityDescription: "Hushkey")
         }
 
         let menu = NSMenu()
@@ -54,9 +65,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pttMenuItem = NSMenuItem(title: "Push-to-talk mode (hold to talk)", action: #selector(togglePTT), keyEquivalent: "")
         pttMenuItem.state = pushToTalk ? .on : .off
         menu.addItem(pttMenuItem)
+        soundsMenuItem = NSMenuItem(title: "Play sounds on toggle", action: #selector(toggleSounds), keyEquivalent: "")
+        soundsMenuItem.state = playSounds ? .on : .off
+        menu.addItem(soundsMenuItem)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Open Accessibility Settings\u{2026}", action: #selector(openAccessibilitySettings), keyEquivalent: ""))
-        let quitItem = NSMenuItem(title: "Quit TeamsMute", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit Hushkey", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         // Explicit target: in a windowless accessory app the responder chain
         // does not reliably resolve terminate(_:) for status-bar menus.
         quitItem.target = NSApp
@@ -95,17 +109,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     fileprivate func hotKeyDown() {
         guard !hotKeyIsDown else { return } // ignore key-repeat
         hotKeyIsDown = true
-        sendMuteToggle()
+        // In push-to-talk the direction is known: key down means unmute.
+        performToggle(setMutedTo: pushToTalk ? false : nil)
     }
 
     fileprivate func hotKeyUp() {
         hotKeyIsDown = false
-        if pushToTalk { sendMuteToggle() }
+        if pushToTalk { performToggle(setMutedTo: true) }
     }
 
     @objc private func togglePTT() {
         pushToTalk.toggle()
         pttMenuItem.state = pushToTalk ? .on : .off
+    }
+
+    @objc private func toggleSounds() {
+        playSounds.toggle()
+        soundsMenuItem.state = playSounds ? .on : .off
     }
 
     @objc private func openAccessibilitySettings() {
@@ -116,6 +136,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hasWarnedNotTrusted = false
 
     @objc fileprivate func sendMuteToggle() {
+        performToggle(setMutedTo: nil)
+    }
+
+    private func performToggle(setMutedTo: Bool?) {
         guard AXIsProcessTrusted() else {
             debugLog("send: blocked, Accessibility not granted")
             flashStatus(symbol: "exclamationmark.triangle")
@@ -141,13 +165,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         up.flags = [.maskCommand, .maskShift]
         down.postToPid(pid)
         up.postToPid(pid)
+        presumedMuted = setMutedTo ?? !presumedMuted
+        if playSounds {
+            NSSound(named: presumedMuted ? "Pop" : "Tink")?.play()
+        }
         flashStatus(symbol: "mic.circle.fill")
     }
 
     private func flashStatus(symbol: String) {
         statusItem.button?.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-            self?.statusItem.button?.image = NSImage(systemSymbolName: "mic.circle", accessibilityDescription: "TeamsMute")
+            self?.statusItem.button?.image = NSImage(systemSymbolName: "mic.circle", accessibilityDescription: "Hushkey")
         }
     }
 }

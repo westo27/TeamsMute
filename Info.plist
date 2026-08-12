@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>TeamsMute</string>
+	<string>Hushkey</string>
 	<key>CFBundleDisplayName</key>
-	<string>TeamsMute</string>
+	<string>Hushkey</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.westo27.teamsmute</string>
+	<string>com.westo27.hushkey</string>
 	<key>CFBundleExecutable</key>
-	<string>TeamsMute</string>
+	<string>Hushkey</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
 	<key>CFBundleVersion</key>

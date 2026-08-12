@@ -1,4 +1,4 @@
-APP     = TeamsMute
+APP     = Hushkey
 BUNDLE  = build/$(APP).app
 
 .PHONY: build install clean
