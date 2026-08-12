@@ -32,10 +32,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(pttMenuItem)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Open Accessibility Settings\u{2026}", action: #selector(openAccessibilitySettings), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Quit TeamsMute", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-        // Target only the items handled by this delegate; Quit must resolve
-        // through the responder chain to NSApplication.
-        menu.items.filter { $0.action != #selector(NSApplication.terminate(_:)) }.forEach { $0.target = self }
+        let quitItem = NSMenuItem(title: "Quit TeamsMute", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        // Explicit target: in a windowless accessory app the responder chain
+        // does not reliably resolve terminate(_:) for status-bar menus.
+        quitItem.target = NSApp
+        menu.addItem(quitItem)
+        menu.items.filter { $0 !== quitItem }.forEach { $0.target = self }
         statusItem.menu = menu
 
         registerHotKey()
