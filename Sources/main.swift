@@ -17,9 +17,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set { UserDefaults.standard.set(newValue, forKey: "playSounds") }
     }
 
-    // Best-effort state tracking: Teams' real mute state is unreadable, so
-    // assume "muted" at launch and flip on every toggle we send.
-    private var presumedMuted = true
     private var soundsMenuItem: NSMenuItem!
 
     private var sigusr1Source: DispatchSourceSignal?
@@ -109,13 +106,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     fileprivate func hotKeyDown() {
         guard !hotKeyIsDown else { return } // ignore key-repeat
         hotKeyIsDown = true
-        // In push-to-talk the direction is known: key down means unmute.
-        performToggle(setMutedTo: pushToTalk ? false : nil)
+        sendMuteToggle()
     }
 
     fileprivate func hotKeyUp() {
         hotKeyIsDown = false
-        if pushToTalk { performToggle(setMutedTo: true) }
+        if pushToTalk { sendMuteToggle() }
     }
 
     @objc private func togglePTT() {
@@ -136,10 +132,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hasWarnedNotTrusted = false
 
     @objc fileprivate func sendMuteToggle() {
-        performToggle(setMutedTo: nil)
-    }
-
-    private func performToggle(setMutedTo: Bool?) {
         guard AXIsProcessTrusted() else {
             debugLog("send: blocked, Accessibility not granted")
             flashStatus(symbol: "exclamationmark.triangle")
@@ -165,9 +157,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         up.flags = [.maskCommand, .maskShift]
         down.postToPid(pid)
         up.postToPid(pid)
-        presumedMuted = setMutedTo ?? !presumedMuted
         if playSounds {
-            NSSound(named: presumedMuted ? "Pop" : "Tink")?.play()
+            NSSound(named: "Pop")?.play()
         }
         flashStatus(symbol: "mic.circle.fill")
     }
