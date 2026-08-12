@@ -12,10 +12,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set { UserDefaults.standard.set(newValue, forKey: "pushToTalk") }
     }
 
+    private var sigusr1Source: DispatchSourceSignal?
+
+    private func debugLog(_ message: String) {
+        let line = "\(Date()) \(message)\n"
+        let url = URL(fileURLWithPath: NSHomeDirectory() + "/Library/Logs/TeamsMute.log")
+        if let data = line.data(using: .utf8) {
+            if let handle = try? FileHandle(forWritingTo: url) {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                try? handle.close()
+            } else {
+                try? data.write(to: url)
+            }
+        }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Prompt for Accessibility permission if not yet granted.
         let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         AXIsProcessTrustedWithOptions(opts)
+        debugLog("launch: axTrusted=\(AXIsProcessTrusted())")
+
+        // Debug trigger: `kill -USR1 <pid>` fires the mute toggle.
+        signal(SIGUSR1, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
+        source.setEventHandler { [weak self] in self?.sendMuteToggle() }
+        source.resume()
+        sigusr1Source = source
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
@@ -89,14 +113,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.open(url)
     }
 
+    private var hasWarnedNotTrusted = false
+
     @objc fileprivate func sendMuteToggle() {
+        guard AXIsProcessTrusted() else {
+            debugLog("send: blocked, Accessibility not granted")
+            flashStatus(symbol: "exclamationmark.triangle")
+            if !hasWarnedNotTrusted {
+                hasWarnedNotTrusted = true
+                openAccessibilitySettings()
+            }
+            return
+        }
         let teams = NSRunningApplication.runningApplications(withBundleIdentifier: "com.microsoft.teams2").first
             ?? NSRunningApplication.runningApplications(withBundleIdentifier: "com.microsoft.teams").first
         guard let teams else {
+            debugLog("send: Teams not running")
             flashStatus(symbol: "exclamationmark.circle")
             return
         }
         let pid = teams.processIdentifier
+        debugLog("send: axTrusted=\(AXIsProcessTrusted()) teamsPid=\(pid) bundle=\(teams.bundleIdentifier ?? "?")")
         let source = CGEventSource(stateID: .hidSystemState)
         guard let down = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_M), keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_M), keyDown: false) else { return }
